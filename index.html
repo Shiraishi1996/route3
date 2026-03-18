@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <title>災害AR PWA</title>
+  <meta name="theme-color" content="#1d4ed8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="災害AR" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon-192.png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="./icon-180.png" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <style>
+    :root{
+      --bg:#f8fafc; --panel:#ffffff; --muted:#e2e8f0; --text:#0f172a; --sub:#475569;
+      --blue:#2563eb; --red:#ef4444; --green:#10b981; --yellow:#f59e0b; --line:#dbe4f0;
+      --header-h:56px; --footer-h:82px;
+      color-scheme: light;
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{margin:0;height:100%;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Sans","Noto Sans JP",sans-serif}
+    button,input,select,textarea{font:inherit}
+    .hidden{display:none!important}
+    .screen{display:none;height:100dvh;position:relative}
+    .screen.active{display:block}
+    .header{height:var(--header-h);display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--line);box-shadow:0 6px 24px rgba(15,23,42,.04)}
+    .title{font-weight:700}
+    .content{height:calc(100dvh - var(--header-h) - var(--footer-h));overflow:auto}
+    .footer{height:var(--footer-h);display:flex;gap:10px;padding:12px 16px;background:rgba(255,255,255,.94);backdrop-filter:blur(16px);border-top:1px solid var(--line);box-shadow:0 -6px 24px rgba(15,23,42,.04)}
+    .footer button{flex:1}
+    button,.btn{border:none;border-radius:14px;padding:12px 14px;background:var(--muted);color:var(--text);font-weight:700;box-shadow:0 8px 22px rgba(148,163,184,.14)}
+    button.primary{background:var(--blue)}
+    button.warn{background:var(--red)}
+    button.secondary{background:#eaf1ff;color:#1d4ed8}
+    button.ghost{background:#fff;border:1px solid var(--line);color:var(--text)}
+    button.success{background:var(--green)}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:16px;margin:12px;box-shadow:0 14px 36px rgba(15,23,42,.06)}
+    .muted{color:var(--sub);font-size:13px;line-height:1.45}
+    .big-menu{display:grid;gap:12px;padding:16px}
+    .big-menu button{padding:16px;font-size:16px}
+    .row{display:flex;gap:8px;align-items:center}
+    .row.wrap{flex-wrap:wrap}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#e2e8f0;color:#334155}
+    .pill.shelter{background:#1d4ed8}
+    .pill.hazard{background:#b45309}
+    .pill.post{background:#047857}
+    .pill.route{background:#7c3aed}
+    label{display:block;font-size:13px;color:var(--sub);margin:8px 0 4px}
+    input[type="text"], input[type="number"], input[type="file"], textarea, select{width:100%;padding:12px;border-radius:14px;background:#fff;color:var(--text);border:1px solid var(--line)}
+    textarea{min-height:92px;resize:vertical}
+    #map{width:100%;height:100%}
+    #cameraWrap{position:relative;height:100%;background:#e2e8f0;overflow:hidden}
+    #camera{width:100%;height:100%;object-fit:cover;background:#000}
+    #arOverlay{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+    .ar-label{
+      position:absolute;min-width:120px;max-width:220px;padding:10px 12px;border-radius:14px;
+      background:rgba(255,255,255,.88);backdrop-filter:blur(10px);border:1px solid rgba(203,213,225,.95);
+      color:var(--text);font-size:12px;transform:translate(-50%,-50%);box-shadow:0 12px 28px rgba(15,23,42,.12)
+    }
+    .ar-label .name{font-weight:700;font-size:13px}
+    .statusbar{position:absolute;left:10px;right:10px;top:10px;display:flex;gap:8px;flex-wrap:wrap;z-index:10}
+    .statusbar .chip{background:rgba(255,255,255,.9);border:1px solid rgba(203,213,225,.95);padding:7px 10px;border-radius:999px;font-size:12px;box-shadow:0 8px 20px rgba(15,23,42,.08)}
+    .fabcol{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:8px;z-index:10}
+    .fabcol button{padding:12px 14px;border-radius:14px}
+    .sheet{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:24px 24px 0 0;border-top:1px solid var(--line);max-height:82dvh;overflow:auto;z-index:50;box-shadow:0 -20px 50px rgba(15,23,42,.12)}
+    .sheet .handle{width:56px;height:6px;background:#cbd5e1;border-radius:999px;margin:12px auto}
+    .notice{padding:12px 14px;border-radius:14px;background:#f8fbff;border:1px solid var(--line);font-size:13px;line-height:1.5}
+    .small{font-size:12px}
+    .list{padding:0 12px 12px}
+    .item{padding:12px;border-bottom:1px solid #1f2937}
+    .item:last-child{border-bottom:none}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+    .banner{margin:12px;padding:14px;border-radius:18px;background:linear-gradient(135deg,#eff6ff,#ffffff);border:1px solid #dbeafe;box-shadow:0 12px 28px rgba(37,99,235,.08)}
+    canvas#photoCanvas{width:100%;border-radius:16px;background:#f1f5f9;border:1px dashed var(--line)}
+    .inline-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .route-banner{position:absolute;left:10px;right:10px;bottom:12px;z-index:20;background:rgba(255,255,255,.94);border:1px solid rgba(203,213,225,.95);padding:12px 14px;border-radius:18px;backdrop-filter:blur(12px);box-shadow:0 14px 32px rgba(15,23,42,.12)}
+    .route-arrow{font-size:38px;line-height:1;font-weight:700}
+    .route-grid{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center}
+    .route-mini{position:absolute;left:10px;right:10px;top:52px;z-index:15}
+    .route-mini .notice{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  
+    .ai-panel{position:absolute;left:10px;right:10px;bottom:88px;z-index:18;background:rgba(255,255,255,.94);border:1px solid rgba(203,213,225,.95);padding:12px 14px;border-radius:18px;backdrop-filter:blur(12px);box-shadow:0 14px 32px rgba(15,23,42,.12)}
+    .ai-panel .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+    .ai-panel select,.ai-panel input{background:#fff;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px}
+    .ai-result{margin-top:8px;font-size:12px;color:var(--sub);line-height:1.5}
+    .thumb{width:100%;margin-top:10px;border-radius:14px;border:1px solid var(--line)}
+    .edit-actions{display:flex;gap:8px;margin-top:10px}
+    .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .18s ease;z-index:30}
+    .flash.show{opacity:.9}
+
+    .photo-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+    .photo-input{margin-top:10px}
+    .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:12px}
+    .photo-card{position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#fff;aspect-ratio:1/1;box-shadow:0 10px 24px rgba(15,23,42,.06)}
+    .photo-card img{width:100%;height:100%;object-fit:cover;display:block}
+    .photo-remove{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:999px;background:rgba(255,255,255,.92);color:#0f172a;border:1px solid rgba(203,213,225,.9);padding:0;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer}
+    .photo-empty{padding:18px;border:1px dashed var(--line);border-radius:16px;background:#f8fafc;color:var(--sub);text-align:center;margin-top:12px}
+    .photo-counter{margin-top:8px;font-size:12px;color:var(--sub)}
+    .post-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:10px}
+    .post-gallery img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:14px;border:1px solid var(--line)}
+
+  </style>
+</head>
+<body>
+  <section id="menuScreen" class="screen active">
+    <div class="header"><div class="title">災害AR PWA</div><div class="small" id="installState">PWA準備中</div></div>
+    <div class="content">
+      <div class="banner">
+        <div><strong>ホーム画面追加対応版</strong></div>
+        <div class="muted">iPhoneでは Safari の共有メニューから「ホーム画面に追加」、Android/PCではインストールボタンまたはブラウザの案内から追加できます。</div>
+      </div>
+      <div class="big-menu">
+        <button class="primary" id="toMapBtn">地図を見る</button>
+        <button class="primary" id="toArBtn">ARで見る</button>
+        <button id="toPostsBtn">投稿一覧</button>
+        <button id="toDataBtn">データ管理</button>
+      </div>
+      <div class="card">
+        <div class="row wrap">
+          <span class="pill shelter">避難所</span>
+          <span class="pill hazard">危険地点</span>
+          <span class="pill post">被害投稿</span>
+          <span class="pill route">ルート</span>
+        </div>
+        <p class="muted">ARはGPSと方位を使った方向表示です。避難所を選ぶと、地図に徒歩ルートを出し、ARでは次に進む方向を大きな矢印で表示します。</p>
+      </div>
+      <div class="card">
+        <div class="notice" id="iosHelp">
+          iPhoneでは最初に「位置情報」「カメラ」「向き」の許可が必要です。ホーム画面に追加した後も、最初の一回は各権限を許可してください。
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <button id="installBtn" class="primary hidden">インストール</button>
+      <button id="permBtn">権限を有効化</button>
+    </div>
+  </section>
+
+  <section id="mapScreen" class="screen">
+    <div class="header">
+      <button id="mapBackBtn" class="ghost">戻る</button>
+      <div class="title">地図</div>
+      <button id="mapCenterBtn" class="secondary">現在地</button>
+    </div>
+    <div class="content" style="height:calc(100dvh - var(--header-h) - var(--footer-h));overflow:hidden;position:relative">
+      <div id="map"></div>
+      <div class="route-mini" id="routeMiniWrap">
+        <div class="notice hidden" id="routeMini">
+          <div>
+            <div><strong id="routeTargetName">ルート未設定</strong></div>
+            <div class="small" id="routeMiniText">避難所マーカーの「ここへ避難」を押してください。</div>
+          </div>
+          <button id="clearRouteBtn" class="ghost">解除</button>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <button id="mapToArBtn" class="primary">ARへ</button>
+      <button id="mapAddPostBtn">現在地で投稿</button>
+    </div>
+  </section>
+
+  <section id="arScreen" class="screen">
+    <div class="header">
+      <button id="arBackBtn" class="ghost">戻る</button>
+      <div class="title">AR表示</div>
+      <button id="toggleCamBtn" class="secondary">カメラ開始</button>
+    </div>
+    <div class="content" style="height:calc(100dvh - var(--header-h) - var(--footer-h));overflow:hidden">
+      <div id="cameraWrap">
+        <video id="camera" autoplay muted playsinline webkit-playsinline></video>
+        <div class="statusbar">
+          <div class="chip" id="gpsChip">GPS: --</div>
+          <div class="chip" id="headChip">方位: --</div>
+          <div class="chip" id="camChip">カメラ: OFF</div>
+          <div class="chip" id="aiChip">AI: OFF</div>
+        </div>
+        <div id="arOverlay"></div>
+        <div id="flashOverlay" class="flash"></div>
+        <div id="routeBanner" class="route-banner hidden">
+          <div class="route-grid">
+            <div class="route-arrow" id="routeArrow">↑</div>
+            <div>
+              <div class="row wrap"><span class="pill route">避難ルート</span><span class="small" id="routeTargetPill">未設定</span></div>
+              <div style="font-weight:700;margin-top:4px" id="routeInstruction">避難所を選択してください</div>
+              <div class="small" id="routeMetrics">--</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="aiPanel" class="ai-panel">
+          <div class="row wrap" style="justify-content:space-between">
+            <div><strong>AI自動記録</strong><div class="small">ブラウザ軽量版。検出結果に応じて自動保存します。</div></div>
+            <button id="loadAiBtn" class="secondary">AI読込</button>
+          </div>
+          <div class="controls">
+            <button id="toggleAiBtn">AI開始</button>
+            <select id="aiAutoMode">
+              <option value="off">自動保存OFF</option>
+              <option value="detect">検出で自動保存</option>
+              <option value="interval">数秒おき保存</option>
+            </select>
+            <input id="aiIntervalSec" type="number" min="2" step="1" value="5" placeholder="秒間隔" />
+            <input id="aiTargetInput" type="text" value="person,car,truck,bus,motorcycle,bicycle" placeholder="対象ラベル,..." />
+          </div>
+          <div class="ai-result" id="aiSummary">AI未読込</div>
+        </div>
+
+        <div class="fabcol">
+          <button id="captureBtn" class="primary">写真撮影</button>
+          <button id="arAddPostBtn">現在地で投稿</button>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <button id="arToMapBtn">地図へ</button>
+      <button id="requestOrientationBtn" class="secondary">向き許可</button>
+    </div>
+  </section>
+
+  <section id="postsScreen" class="screen">
+    <div class="header">
+      <button id="postsBackBtn" class="ghost">戻る</button>
+      <div class="title">投稿一覧</div>
+      <button id="clearPostsBtn" class="warn">投稿削除</button>
+    </div>
+    <div class="content">
+      <div class="list" id="postsList"></div>
+    </div>
+    <div class="footer">
+      <button id="postsToDataBtn">JSON管理へ</button>
+    </div>
+  </section>
+
+  <section id="dataScreen" class="screen">
+    <div class="header">
+      <button id="dataBackBtn" class="ghost">戻る</button>
+      <div class="title">データ管理</div>
+      <button id="seedBtn" class="secondary">サンプル再投入</button>
+    </div>
+    <div class="content">
+      <div class="card">
+        <div class="inline-grid">
+          <button id="exportPostsBtn" class="primary">投稿JSON</button>
+          <button id="exportAllBtn" class="primary">全データJSON</button>
+          <button id="exportGeoJsonBtn">GeoJSON</button>
+          <button id="exportSampleBtn">サンプルJSON</button>
+        </div>
+        <label>JSONを読み込む</label>
+        <input type="file" id="importFile" accept=".json,application/json" />
+        <p class="muted">読み込みはマージです。同じ id があるデータは上書きします。</p>
+      </div>
+      <div class="card">
+        <div class="small">状態</div>
+        <div class="mono" id="debugBox"></div>
+      </div>
+    </div>
+    <div class="footer">
+      <button id="dataToMapBtn">地図へ</button>
+    </div>
+  </section>
+
+  <div id="postSheet" class="sheet hidden" aria-modal="true" role="dialog">
+    <div class="handle"></div>
+    <div class="card" style="margin-top:0">
+      <div class="row" style="justify-content:space-between">
+        <strong>現在地で投稿</strong>
+        <button id="closePostSheetBtn" class="ghost">閉じる</button>
+      </div>
+      <label>種類</label>
+      <select id="postType">
+        <option value="DamagePost">被害投稿</option>
+        <option value="Hazard">危険地点として保存</option>
+      </select>
+      <label>カテゴリ</label>
+      <select id="postCategory">
+        <option value="collapsed_building">倒壊建物</option>
+        <option value="blocked_road">通行止め</option>
+        <option value="flooding">浸水</option>
+        <option value="fire">火災</option>
+        <option value="landslide">土砂災害</option>
+        <option value="other">その他</option>
+      </select>
+      <input type="hidden" id="editPostId" />
+      <label>タイトル</label>
+      <input type="text" id="postTitle" placeholder="例: 倒壊家屋あり" />
+      <label>コメント</label>
+      <textarea id="postDesc" placeholder="現場状況を入力"></textarea>
+      <label>撮影プレビュー</label>
+      <canvas id="photoCanvas" width="800" height="450"></canvas>
+      <div class="photo-tools">
+        <button type="button" id="sheetCaptureBtn" class="secondary">カメラ画像を追加</button>
+        <button type="button" id="clearPhotosBtn" class="ghost">画像をクリア</button>
+      </div>
+      <label>画像を追加</label>
+      <input type="file" id="photoFiles" class="photo-input" accept="image/*" multiple />
+      <div class="photo-counter" id="photoCountText">画像 0枚</div>
+      <div id="photoPreviewGrid" class="photo-grid"></div>
+      <div class="muted">複数画像をまとめて追加できます。写真を撮っていない場合は、位置情報だけ保存します。AIが自動保存した投稿も、あとからここで修正できます。</div>
+      <label>AIメモ</label>
+      <textarea id="postAiNote" placeholder="AIの検出結果や被害推定メモ"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button id="savePostBtn" class="primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <script>
+  (() => {
+    const STORAGE_KEY = 'disaster_ar_pwa_v2';
+    const APP_VERSION = '1.2.0-ai-route';
+    const ROUTE_RECALC_MS = 15000;
+    const ROUTE_RECALC_MOVE_M = 20;
+    const SAMPLE_POINTS = [
+      {id:'shelter-1', pointType:'Shelter', title:'避難所A', description:'小学校体育館', latitude:36.1099, longitude:140.1018, createdAt:new Date().toISOString(), category:'shelter'},
+      {id:'shelter-2', pointType:'Shelter', title:'避難所B', description:'公民館', latitude:36.1132, longitude:140.1082, createdAt:new Date().toISOString(), category:'shelter'},
+      {id:'hazard-1', pointType:'Hazard', title:'危険地点A', description:'道路損傷の可能性', latitude:36.1088, longitude:140.1042, createdAt:new Date().toISOString(), category:'blocked_road'}
+    ];
+    const state = {
+      points: [],
+      map: null,
+      mapMarkers: new Map(),
+      currentPosition: null,
+      heading: null,
+      cameraStream: null,
+      lastPhotoDataUrl: null,
+      lastPhotoDataUrls: [],
+      deferredPrompt: null,
+      swReady: false,
+      orientationGranted: false,
+      currentScreen: 'menuScreen',
+      routeLine: null,
+      route: null,
+      lastRouteFetchAt: 0,
+      lastRouteOrigin: null,
+      watchId: null,
+      editingPostId: null,
+      ai: {
+        model: null,
+        enabled: false,
+        loading: false,
+        busy: false,
+        loopTimer: null,
+        lastDetections: [],
+        lastSummary: 'AI未読込',
+        autoMode: 'off',
+        intervalSec: 5,
+        targetClasses: ['person','car','truck','bus','motorcycle','bicycle'],
+        threshold: 0.66,
+        lastAutoCaptureAt: 0
+      }
+    };
+
+    const $ = id => document.getElementById(id);
+    const screens = ['menuScreen','mapScreen','arScreen','postsScreen','dataScreen'];
+
+    function switchScreen(id){
+      screens.forEach(s => $(s).classList.toggle('active', s===id));
+      state.currentScreen = id;
+      if(id==='postsScreen') renderPosts();
+      if(id==='dataScreen') updateDebug();
+      if(id==='mapScreen') setTimeout(()=> state.map && state.map.invalidateSize(), 50);
+      if(id==='arScreen') updateAr();
+    }
+
+    function saveState(){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({version:APP_VERSION, points: state.points, routeTargetId: state.route?.targetId || null}));
+      updateDebug();
+    }
+
+    function loadState(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(raw){
+          const parsed = JSON.parse(raw);
+          state.points = Array.isArray(parsed.points) ? parsed.points : [];
+          if(parsed.routeTargetId){
+            state.route = {targetId: parsed.routeTargetId, geometry: [], steps: [], distance: null, duration: null};
+          }
+        }
+      }catch(e){ console.error(e); }
+      if(state.points.length===0){
+        state.points = structuredClone(SAMPLE_POINTS);
+        saveState();
+      }
+    }
+
+    function mergePoints(newPoints){
+      const byId = new Map(state.points.map(p => [p.id, p]));
+      for(const p of newPoints){ byId.set(p.id, p); }
+      state.points = Array.from(byId.values());
+      saveState();
+      refreshMapMarkers();
+      renderPosts();
+      updateAr();
+      refreshActiveRouteIfNeeded(true);
+    }
+
+    function currentLatLng(){
+      return state.currentPosition
+        ? [state.currentPosition.coords.latitude, state.currentPosition.coords.longitude]
+        : [36.1100, 140.1020];
+    }
+
+    function initMap(){
+      state.map = L.map('map', {zoomControl:true});
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(state.map);
+      const [lat,lng] = currentLatLng();
+      state.map.setView([lat,lng], 16);
+      refreshMapMarkers();
+      refreshRouteUI();
+    }
+
+    function refreshMapMarkers(){
+      if(!state.map) return;
+      for(const m of state.mapMarkers.values()) state.map.removeLayer(m);
+      state.mapMarkers.clear();
+
+      if(state.currentPosition){
+        const {latitude, longitude, accuracy} = state.currentPosition.coords;
+        const current = L.marker([latitude, longitude]).addTo(state.map).bindPopup('現在地');
+        state.mapMarkers.set('__current__', current);
+        const circle = L.circle([latitude, longitude], {radius: accuracy || 20}).addTo(state.map);
+        state.mapMarkers.set('__accuracy__', circle);
+      }
+
+      for(const p of state.points){
+        const color = p.pointType === 'Shelter' ? '#2563eb' : p.pointType === 'Hazard' ? '#f59e0b' : '#10b981';
+        const icon = L.divIcon({
+          className:'custom-div-icon',
+          html:`<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,.4)"></div>`,
+          iconSize:[14,14],
+          iconAnchor:[7,7]
+        });
+        const marker = L.marker([p.latitude, p.longitude], {icon}).addTo(state.map);
+        const primaryPhoto = getPrimaryPhotoUrl(p);
+        const photoCount = normalizePhotoList(p).length;
+        const photoBlock = primaryPhoto ? `<div style="margin-top:8px"><img src="${primaryPhoto}" style="width:160px;border-radius:12px;border:1px solid #dbe4f0" />${photoCount > 1 ? `<div class="small" style="margin-top:4px">他 ${photoCount-1} 枚</div>` : ''}</div>` : '';
+        const routeBtn = p.pointType === 'Shelter' ? `<div style="margin-top:8px"><button class="popup-route-btn" data-id="${escapeHtml(p.id)}" style="padding:8px 10px;border:none;border-radius:10px;background:#2563eb;color:white;font-weight:700">ここへ避難</button></div>` : '';
+        marker.bindPopup(`<strong>${escapeHtml(p.title || '(無題)')}</strong><br>${escapeHtml(p.description || '')}<br><small>${p.pointType}</small>${routeBtn}${photoBlock}`);
+        marker.on('popupopen', () => {
+          setTimeout(() => {
+            const btn = document.querySelector(`.popup-route-btn[data-id="${CSS.escape(p.id)}"]`);
+            if(btn) btn.onclick = () => { selectRouteTarget(p.id); state.map.closePopup(); };
+          }, 0);
+        });
+        state.mapMarkers.set(p.id, marker);
+      }
+      renderRouteLine();
+    }
+
+    function requestPosition(){
+      if(!navigator.geolocation){
+        alert('このブラウザでは位置情報が使えません');
+        return;
+      }
+      if(state.watchId != null) navigator.geolocation.clearWatch(state.watchId);
+      state.watchId = navigator.geolocation.watchPosition(pos => {
+        state.currentPosition = pos;
+        $('gpsChip').textContent = `GPS: ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+        if(state.map){
+          refreshMapMarkers();
+        }
+        refreshActiveRouteIfNeeded();
+        updateAr();
+      }, err => {
+        console.warn(err);
+        $('gpsChip').textContent = 'GPS: 許可/取得エラー';
+      }, {enableHighAccuracy:true, maximumAge:5000, timeout:10000});
+    }
+
+    async function requestOrientation(){
+      try{
+        if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+          const res = await DeviceOrientationEvent.requestPermission();
+          state.orientationGranted = res === 'granted';
+        }else{
+          state.orientationGranted = true;
+        }
+        window.addEventListener('deviceorientationabsolute', onOrientation, true);
+        window.addEventListener('deviceorientation', onOrientation, true);
+      }catch(e){
+        console.warn(e);
+      }
+    }
+    function onOrientation(ev){
+      let heading = null;
+      if(typeof ev.webkitCompassHeading === 'number'){
+        heading = ev.webkitCompassHeading;
+      }else if(typeof ev.alpha === 'number'){
+        heading = 360 - ev.alpha;
+      }
+      if(heading != null){
+        state.heading = (heading + 360) % 360;
+        $('headChip').textContent = `方位: ${state.heading.toFixed(0)}°`;
+        updateAr();
+      }
+    }
+
+    async function startCamera(){
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {facingMode: {ideal:'environment'}},
+          audio: false
+        });
+        state.cameraStream = stream;
+        $('camera').srcObject = stream;
+        $('camChip').textContent = 'カメラ: ON';
+        $('toggleCamBtn').textContent = 'カメラ停止';
+      }catch(e){
+        console.warn(e);
+        alert('カメラを開始できませんでした');
+      }
+    }
+    function stopCamera(){
+      if(state.cameraStream){
+        state.cameraStream.getTracks().forEach(t => t.stop());
+        state.cameraStream = null;
+      }
+      if(state.ai.loopTimer){
+        clearTimeout(state.ai.loopTimer);
+        state.ai.loopTimer = null;
+      }
+      $('camera').srcObject = null;
+      $('camChip').textContent = 'カメラ: OFF';
+      $('toggleCamBtn').textContent = 'カメラ開始';
+      updateAiUI();
+    }
+
+    function capturePhoto(){
+      const video = $('camera');
+      const canvas = $('photoCanvas');
+      const ctx = canvas.getContext('2d');
+      if(!video.videoWidth){
+        alert('先にカメラを開始してください');
+        return null;
+      }
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      addPhotoDataUrl(dataUrl);
+      return dataUrl;
+    }
+
+
+    function normalizePhotoList(post){
+      const list = Array.isArray(post.photoDataUrls) ? post.photoDataUrls.filter(Boolean) : [];
+      if(list.length) return list;
+      return post.photoDataUrl ? [post.photoDataUrl] : [];
+    }
+
+    function getPrimaryPhotoUrl(post){
+      return normalizePhotoList(post)[0] || null;
+    }
+
+    function setCanvasPreview(dataUrl){
+      const canvas = $('photoCanvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      };
+      img.src = dataUrl;
+    }
+
+    function renderPhotoPreviewList(){
+      const grid = $('photoPreviewGrid');
+      const items = state.lastPhotoDataUrls || [];
+      $('photoCountText').textContent = `画像 ${items.length}枚`;
+      if(!items.length){
+        grid.innerHTML = '<div class="photo-empty">まだ画像は追加されていません</div>';
+        const c = $('photoCanvas').getContext('2d');
+        c.clearRect(0,0,$('photoCanvas').width,$('photoCanvas').height);
+        return;
+      }
+      grid.innerHTML = items.map((url, idx) => `
+        <div class="photo-card">
+          <img src="${url}" alt="添付画像 ${idx+1}">
+          <button type="button" class="photo-remove" data-index="${idx}" aria-label="画像を削除">×</button>
+        </div>
+      `).join('');
+      setCanvasPreview(items[items.length - 1]);
+    }
+
+    function addPhotoDataUrl(dataUrl){
+      if(!dataUrl) return;
+      state.lastPhotoDataUrl = dataUrl;
+      state.lastPhotoDataUrls = [...(state.lastPhotoDataUrls || []), dataUrl];
+      renderPhotoPreviewList();
+    }
+
+    function clearPhotoSelection(){
+      state.lastPhotoDataUrl = null;
+      state.lastPhotoDataUrls = [];
+      $('photoFiles').value = '';
+      renderPhotoPreviewList();
+    }
+
+    async function addPhotoFiles(files){
+      const list = Array.from(files || []).filter(file => file.type && file.type.startsWith('image/'));
+      for(const file of list){
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        addPhotoDataUrl(dataUrl);
+      }
+    }
+
+    function resetPostForm(){
+      $('editPostId').value = '';
+      $('postType').value = 'DamagePost';
+      $('postCategory').value = 'collapsed_building';
+      $('postTitle').value = '';
+      $('postDesc').value = '';
+      $('postAiNote').value = '';
+      clearPhotoSelection();
+    }
+
+    function openPostSheet(){
+      $('postSheet').classList.remove('hidden');
+      renderPhotoPreviewList();
+    }
+    function closePostSheet(){
+      $('postSheet').classList.add('hidden');
+    }
+    function savePost(){
+      if(!state.currentPosition){
+        alert('位置情報がまだ取得できていません');
+        return;
+      }
+      const title = $('postTitle').value.trim() || '現地投稿';
+      const description = $('postDesc').value.trim();
+      const pointType = $('postType').value;
+      const category = $('postCategory').value;
+      const p = {
+        id: 'post-' + Date.now(),
+        pointType,
+        title,
+        description,
+        category,
+        latitude: state.currentPosition.coords.latitude,
+        longitude: state.currentPosition.coords.longitude,
+        heading: state.heading,
+        photoDataUrl: state.lastPhotoDataUrl,
+        photoDataUrls: [...(state.lastPhotoDataUrls || [])],
+        createdAt: new Date().toISOString(),
+      };
+      state.points.push(p);
+      saveState();
+      refreshMapMarkers();
+      renderPosts();
+      updateAr();
+      closePostSheet();
+      resetPostForm();
+      alert('保存しました');
+    }
+
+    function renderPosts(){
+      const box = $('postsList');
+      const posts = state.points.filter(p => p.pointType === 'DamagePost' || p.pointType === 'Hazard');
+      if(posts.length===0){
+        box.innerHTML = '<div class="card">投稿はまだありません。</div>';
+        return;
+      }
+      box.innerHTML = posts.sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||'')).map(p => `
+        <div class="card">
+          <div class="row wrap">
+            <span class="pill ${p.pointType === 'Hazard' ? 'hazard' : 'post'}">${p.pointType === 'Hazard' ? '危険地点' : '被害投稿'}</span>
+            <span class="small">${new Date(p.createdAt).toLocaleString('ja-JP')}</span>
+          </div>
+          <div style="margin-top:8px;font-weight:700">${escapeHtml(p.title || '(無題)')}</div>
+          <div class="muted">${escapeHtml(p.description || '')}</div>
+          <div class="small mono" style="margin-top:8px">${Number(p.latitude).toFixed(6)}, ${Number(p.longitude).toFixed(6)}</div>
+          ${normalizePhotoList(p).length ? `<div class="post-gallery">${normalizePhotoList(p).map(url => `<img src="${url}" alt="投稿画像">`).join('')}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+
+    async function loadAiModel(){
+      if(state.ai.model || state.ai.loading) return;
+      if(!window.cocoSsd || !window.tf){
+        alert('AIライブラリの読込に失敗しました');
+        return;
+      }
+      state.ai.loading = true;
+      $('aiChip').textContent = 'AI: 読込中';
+      $('aiSummary').textContent = 'モデルを読み込んでいます…';
+      try{
+        await tf.ready();
+        state.ai.model = await cocoSsd.load({base:'lite_mobilenet_v2'});
+        $('aiChip').textContent = 'AI: 準備完了';
+        state.ai.lastSummary = 'AI準備完了';
+        $('aiSummary').textContent = '軽量検出モデルの準備ができました。';
+      }catch(err){
+        console.error(err);
+        $('aiChip').textContent = 'AI: 失敗';
+        $('aiSummary').textContent = 'AI読込に失敗しました。通信状態を確認してください。';
+      }finally{
+        state.ai.loading = false;
+      }
+    }
+
+    function syncAiSettingsFromUI(){
+      state.ai.autoMode = $('aiAutoMode').value;
+      state.ai.intervalSec = Math.max(2, Number($('aiIntervalSec').value || 5));
+      state.ai.targetClasses = $('aiTargetInput').value.split(',').map(s => s.trim()).filter(Boolean);
+      if(!state.ai.targetClasses.length) state.ai.targetClasses = ['person','car','truck','bus','motorcycle','bicycle'];
+    }
+
+    function aiTargetsDetected(detections){
+      const targets = new Set(state.ai.targetClasses);
+      return detections.filter(d => targets.has(d.class));
+    }
+
+    function summarizeDetections(detections){
+      if(!detections.length) return '検出なし';
+      return detections.map(d => `${d.class} ${(d.score*100).toFixed(0)}%`).slice(0,5).join(' / ');
+    }
+
+    function inferDamageHeuristic(detections){
+      if(!detections.length) return '被害判定不可（手動確認推奨）';
+      const labels = detections.map(d => d.class);
+      const counts = Object.fromEntries(labels.map(l => [l, labels.filter(x => x===l).length]));
+      const bigVehicles = ['car','truck','bus','motorcycle','bicycle'].reduce((n, k) => n + (counts[k] || 0), 0);
+      const people = counts['person'] || 0;
+      const traffic = (counts['traffic light'] || 0) + (counts['stop sign'] || 0);
+      if(bigVehicles >= 2) return '車両滞留・道路閉塞候補';
+      if(people >= 4) return '群衆・要確認候補';
+      if(traffic >= 1 && bigVehicles >= 1) return '交差点周辺の異常候補';
+      return `検出物あり（${labels.slice(0,3).join('・')}）— 手動確認推奨`;
+    }
+
+    function updateAiUI(){
+      const summary = state.ai.lastSummary || 'AI未起動';
+      $('aiSummary').textContent = summary;
+      const status = !state.ai.model ? (state.ai.loading ? '読込中' : '未読込') : (state.ai.enabled ? '監視中' : '待機');
+      $('aiChip').textContent = `AI: ${status}`;
+      $('toggleAiBtn').textContent = state.ai.enabled ? 'AI停止' : 'AI開始';
+    }
+
+    function stopAiLoop(){
+      if(state.ai.loopTimer){
+        clearTimeout(state.ai.loopTimer);
+        state.ai.loopTimer = null;
+      }
+      state.ai.enabled = false;
+      updateAiUI();
+    }
+
+    async function toggleAi(){
+      syncAiSettingsFromUI();
+      if(!state.ai.model) await loadAiModel();
+      if(!state.ai.model) return;
+      state.ai.enabled = !state.ai.enabled;
+      updateAiUI();
+      if(state.ai.enabled) aiLoop();
+      else stopAiLoop();
+    }
+
+    async function aiLoop(){
+      if(!state.ai.enabled || !state.ai.model || !state.cameraStream){
+        state.ai.loopTimer = null;
+        updateAiUI();
+        return;
+      }
+      if(!state.ai.busy){
+        state.ai.busy = true;
+        try{
+          await detectFrameAndMaybeCapture();
+        }catch(err){
+          console.error(err);
+        }finally{
+          state.ai.busy = false;
+        }
+      }
+      state.ai.loopTimer = setTimeout(aiLoop, 1200);
+    }
+
+    async function detectFrameAndMaybeCapture(){
+      const video = $('camera');
+      if(!video.videoWidth || !video.videoHeight) return;
+      const work = document.createElement('canvas');
+      const w = 320;
+      const h = Math.max(180, Math.round(video.videoHeight * (w / video.videoWidth)));
+      work.width = w;
+      work.height = h;
+      const ctx = work.getContext('2d', {willReadFrequently:true});
+      ctx.drawImage(video, 0, 0, w, h);
+      const raw = await state.ai.model.detect(work, 10);
+      const detections = raw.filter(d => d.score >= state.ai.threshold).sort((a,b) => b.score - a.score);
+      state.ai.lastDetections = detections;
+      const heuristic = inferDamageHeuristic(detections);
+      state.ai.lastSummary = detections.length
+        ? `検出: ${summarizeDetections(detections)} / 推定: ${heuristic}`
+        : '検出なし';
+      updateAiUI();
+      const now = Date.now();
+      const targetHits = aiTargetsDetected(detections);
+      const canCapture = now - state.ai.lastAutoCaptureAt >= state.ai.intervalSec * 1000;
+      if(state.ai.autoMode === 'detect' && targetHits.length && canCapture){
+        autoSaveAiCapture(detections, heuristic, 'detect');
+        state.ai.lastAutoCaptureAt = now;
+      }else if(state.ai.autoMode === 'interval' && canCapture){
+        autoSaveAiCapture(detections, heuristic, 'interval');
+        state.ai.lastAutoCaptureAt = now;
+      }
+    }
+
+    function autoSaveAiCapture(detections, heuristic, triggerMode){
+      if(!state.currentPosition) return;
+      const dataUrl = captureFrameDataUrl();
+      if(!dataUrl) return;
+      addPhotoDataUrl(dataUrl);
+      flashCapture();
+      const top = detections[0];
+      const aiNote = `AI検出: ${summarizeDetections(detections)} / 被害メモ: ${heuristic}`;
+      const p = {
+        id: 'post-' + Date.now(),
+        pointType: 'DamagePost',
+        title: top ? `AI検出: ${top.class}` : 'AI自動記録',
+        description: triggerMode === 'detect'
+          ? '対象物の検出をトリガーに自動保存しました。'
+          : `${state.ai.intervalSec}秒間隔で自動保存しました。`,
+        category: heuristic.includes('閉塞') ? 'blocked_road' : 'other',
+        aiSource: 'coco-ssd',
+        aiTriggerMode: triggerMode,
+        aiDetections: detections.map(d => ({class:d.class, score:d.score, bbox:d.bbox})),
+        aiNote,
+        manualReviewed: false,
+        latitude: state.currentPosition.coords.latitude,
+        longitude: state.currentPosition.coords.longitude,
+        heading: state.heading,
+        photoDataUrl: dataUrl,
+        createdAt: new Date().toISOString()
+      };
+      state.points.push(p);
+      saveState();
+      refreshMapMarkers();
+      renderPosts();
+    }
+
+    function updateAr(){
+      const overlay = $('arOverlay');
+      overlay.innerHTML = '';
+
+      if(state.route && state.currentPosition){
+        const guide = computeRouteGuide();
+        if(guide){
+          $('routeBanner').classList.remove('hidden');
+          $('routeArrow').textContent = arrowFromDiff(guide.relativeBearing);
+          $('routeTargetPill').textContent = guide.targetName;
+          $('routeInstruction').textContent = guide.instruction;
+          $('routeMetrics').textContent = `次の目標まで ${Math.round(guide.nextDistance)}m / 到着まで 約${Math.round(guide.totalDistance)}m`;
+        }else{
+          $('routeBanner').classList.add('hidden');
+        }
+      }else{
+        $('routeBanner').classList.add('hidden');
+      }
+
+      if(!state.currentPosition || state.heading == null) return;
+
+      const W = window.innerWidth;
+      const H = window.innerHeight - 130;
+      const points = state.points.map(p => {
+        const distance = getDistanceMeters(
+          state.currentPosition.coords.latitude, state.currentPosition.coords.longitude,
+          p.latitude, p.longitude
+        );
+        const bearing = getBearing(
+          state.currentPosition.coords.latitude, state.currentPosition.coords.longitude,
+          p.latitude, p.longitude
+        );
+        let diff = normalizeAngle(bearing - state.heading);
+        return {p, distance, bearing, diff};
+      }).filter(x => x.distance < 1000)
+        .sort((a,b) => a.distance - b.distance)
+        .slice(0, 8);
+
+      for(const item of points){
+        const x = (item.diff / 45) * (W/2) + (W/2);
+        const clampedX = Math.max(40, Math.min(W-40, x));
+        const y = Math.max(100, Math.min(H-40, 190 + item.distance * 0.08));
+        const cls = item.p.pointType === 'Shelter' ? 'shelter' : item.p.pointType === 'Hazard' ? 'hazard' : 'post';
+        const div = document.createElement('div');
+        div.className = 'ar-label';
+        div.style.left = clampedX + 'px';
+        div.style.top = y + 'px';
+        const selectedMark = state.route?.targetId === item.p.id ? '<span class="pill route">選択中</span>' : '';
+        div.innerHTML = `
+          <div class="row wrap">
+            <span class="pill ${cls}">${item.p.pointType === 'Shelter' ? '避難所' : item.p.pointType === 'Hazard' ? '危険地点' : '投稿'}</span>
+            ${selectedMark}
+          </div>
+          <div class="name">${escapeHtml(item.p.title || '(無題)')}</div>
+          <div>${Math.round(item.distance)} m / ${Math.round(item.bearing)}°</div>
+        `;
+        overlay.appendChild(div);
+      }
+    }
+
+    function getDistanceMeters(lat1, lon1, lat2, lon2){
+      const R = 6371000;
+      const toRad = d => d * Math.PI/180;
+      const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+      return 2*R*Math.asin(Math.sqrt(a));
+    }
+    function getBearing(lat1, lon1, lat2, lon2){
+      const toRad = d => d * Math.PI/180, toDeg = r => r * 180/Math.PI;
+      const y = Math.sin(toRad(lon2-lon1)) * Math.cos(toRad(lat2));
+      const x = Math.cos(toRad(lat1))*Math.sin(toRad(lat2)) -
+                Math.sin(toRad(lat1))*Math.cos(toRad(lat2))*Math.cos(toRad(lon2-lon1));
+      return (toDeg(Math.atan2(y,x)) + 360) % 360;
+    }
+    function normalizeAngle(a){ return ((a + 540) % 360) - 180; }
+    function escapeHtml(str){
+      return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+    }
+
+    function arrowFromDiff(diff){
+      if(diff < -135) return '↙';
+      if(diff < -60) return '←';
+      if(diff < -20) return '↖';
+      if(diff <= 20) return '↑';
+      if(diff <= 60) return '↗';
+      if(diff <= 135) return '→';
+      return '↘';
+    }
+
+    function selectRouteTarget(targetId){
+      state.route = {targetId, geometry: [], steps: [], distance: null, duration: null};
+      saveState();
+      refreshActiveRouteIfNeeded(true);
+      refreshRouteUI();
+      updateAr();
+    }
+
+    function clearRoute(){
+      state.route = null;
+      if(state.routeLine && state.map){ state.map.removeLayer(state.routeLine); }
+      state.routeLine = null;
+      saveState();
+      refreshRouteUI();
+      updateAr();
+    }
+
+    function getRouteTarget(){
+      return state.route?.targetId ? state.points.find(p => p.id === state.route.targetId) : null;
+    }
+
+    async function refreshActiveRouteIfNeeded(force=false){
+      if(!state.route || !state.currentPosition) { refreshRouteUI(); return; }
+      const target = getRouteTarget();
+      if(!target) { clearRoute(); return; }
+      const now = Date.now();
+      const origin = [state.currentPosition.coords.latitude, state.currentPosition.coords.longitude];
+      const moved = state.lastRouteOrigin ? getDistanceMeters(state.lastRouteOrigin[0], state.lastRouteOrigin[1], origin[0], origin[1]) : Infinity;
+      if(!force && now - state.lastRouteFetchAt < ROUTE_RECALC_MS && moved < ROUTE_RECALC_MOVE_M && state.route.geometry?.length){
+        refreshRouteUI();
+        return;
+      }
+      try{
+        await fetchRoute(origin, [target.latitude, target.longitude]);
+      }catch(e){
+        console.warn('route fetch failed', e);
+      }
+      refreshRouteUI();
+      updateAr();
+    }
+
+    async function fetchRoute(origin, dest){
+      const url = `https://router.project-osrm.org/route/v1/foot/${origin[1]},${origin[0]};${dest[1]},${dest[0]}?overview=full&geometries=geojson&steps=true`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('route api error');
+      const data = await res.json();
+      const route = data.routes && data.routes[0];
+      if(!route) throw new Error('route not found');
+      state.route.geometry = route.geometry.coordinates.map(([lon,lat]) => [lat,lon]);
+      state.route.steps = (route.legs?.[0]?.steps || []).map(step => ({
+        distance: step.distance,
+        duration: step.duration,
+        name: step.name,
+        instruction: step.maneuver?.instruction || '',
+        type: step.maneuver?.type || '',
+        modifier: step.maneuver?.modifier || '',
+        location: step.maneuver?.location ? [step.maneuver.location[1], step.maneuver.location[0]] : null
+      }));
+      state.route.distance = route.distance;
+      state.route.duration = route.duration;
+      state.lastRouteFetchAt = Date.now();
+      state.lastRouteOrigin = origin;
+      renderRouteLine();
+    }
+
+    function renderRouteLine(){
+      if(!state.map) return;
+      if(state.routeLine){ state.map.removeLayer(state.routeLine); state.routeLine = null; }
+      if(state.route?.geometry?.length){
+        state.routeLine = L.polyline(state.route.geometry, {color:'#7c3aed', weight:6, opacity:0.85}).addTo(state.map);
+      }
+      refreshRouteUI();
+    }
+
+    function refreshRouteUI(){
+      const wrap = $('routeMini');
+      const target = getRouteTarget();
+      if(!state.route || !target){
+        wrap.classList.add('hidden');
+        $('routeMiniText').textContent = '避難所マーカーの「ここへ避難」を押してください。';
+        return;
+      }
+      wrap.classList.remove('hidden');
+      $('routeTargetName').textContent = target.title || '選択中の避難所';
+      const remain = computeRouteGuide();
+      if(remain){
+        $('routeMiniText').textContent = `${remain.instruction} / 残り約${Math.round(remain.totalDistance)}m`;
+      }else if(state.route.distance != null){
+        $('routeMiniText').textContent = `ルート計算済み / 残り約${Math.round(state.route.distance)}m`;
+      }else{
+        $('routeMiniText').textContent = 'ルートを計算中です。';
+      }
+    }
+
+    function computeRouteGuide(){
+      if(!state.route?.geometry?.length || !state.currentPosition || state.heading == null) return null;
+      const cur = [state.currentPosition.coords.latitude, state.currentPosition.coords.longitude];
+      let nearestIdx = 0;
+      let nearestDist = Infinity;
+      for(let i=0;i<state.route.geometry.length;i++){
+        const pt = state.route.geometry[i];
+        const d = getDistanceMeters(cur[0], cur[1], pt[0], pt[1]);
+        if(d < nearestDist){ nearestDist = d; nearestIdx = i; }
+      }
+      const nextIdx = Math.min(nearestIdx + 4, state.route.geometry.length - 1);
+      const nextPt = state.route.geometry[nextIdx];
+      const nextDistance = getDistanceMeters(cur[0], cur[1], nextPt[0], nextPt[1]);
+      let totalDistance = 0;
+      let prev = cur;
+      for(let i=nextIdx;i<state.route.geometry.length;i++){
+        const pt = state.route.geometry[i];
+        totalDistance += getDistanceMeters(prev[0], prev[1], pt[0], pt[1]);
+        prev = pt;
+      }
+      const bearing = getBearing(cur[0], cur[1], nextPt[0], nextPt[1]);
+      const relativeBearing = normalizeAngle(bearing - state.heading);
+      const target = getRouteTarget();
+      let instruction = 'この方向へ進んでください';
+      const upcomingStep = (state.route.steps || []).find(step => step.location && getDistanceMeters(cur[0], cur[1], step.location[0], step.location[1]) > 8);
+      if(upcomingStep){
+        instruction = upcomingStep.instruction || describeModifier(upcomingStep.modifier);
+      } else if(totalDistance < 20) {
+        instruction = '避難所に到着です';
+      }
+      return {
+        targetName: target?.title || '避難所',
+        bearing,
+        relativeBearing,
+        nextDistance,
+        totalDistance,
+        instruction
+      };
+    }
+
+    function describeModifier(mod){
+      if(mod === 'left' || mod === 'sharp left' || mod === 'slight left') return '左方向へ進んでください';
+      if(mod === 'right' || mod === 'sharp right' || mod === 'slight right') return '右方向へ進んでください';
+      if(mod === 'uturn') return '向きを変えて戻ってください';
+      return 'この方向へ進んでください';
+    }
+
+    async function exportJson(data, filename){
+      const text = JSON.stringify(data, null, 2);
+      const blob = new Blob([text], {type:'application/json'});
+      if(navigator.canShare && navigator.canShare({files:[new File([blob], filename, {type:'application/json'})]})){
+        try{
+          await navigator.share({files:[new File([blob], filename, {type:'application/json'})], title: filename});
+          return;
+        }catch(e){ }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(()=> URL.revokeObjectURL(url), 1000);
+    }
+
+    function toGeoJSON(points){
+      return {
+        type:'FeatureCollection',
+        features: points.map(p => ({
+          type:'Feature',
+          geometry:{type:'Point', coordinates:[Number(p.longitude), Number(p.latitude)]},
+          properties:{...p}
+        }))
+      };
+    }
+
+    function updateDebug(){
+      const installed = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+      $('installState').textContent = installed ? 'ホーム画面起動中' : 'ブラウザ起動中';
+      $('debugBox').textContent = [
+        `version=${APP_VERSION}`,
+        `points=${state.points.length}`,
+        `gps=${state.currentPosition ? 'ready' : 'pending'}`,
+        `heading=${state.heading == null ? 'pending' : state.heading.toFixed(0)}`,
+        `camera=${state.cameraStream ? 'on' : 'off'}`,
+        `serviceWorker=${state.swReady}`,
+        `standalone=${installed}`,
+        `routeTarget=${state.route?.targetId || 'none'}`,
+        `routePoints=${state.route?.geometry?.length || 0}`
+      ].join('\n');
+    }
+
+    function clearPosts(){
+      if(!confirm('投稿と危険地点の追加分を削除しますか？')) return;
+      state.points = state.points.filter(p => p.id.startsWith('shelter-') || p.id === 'hazard-1');
+      saveState();
+      refreshMapMarkers();
+      renderPosts();
+      updateAr();
+    }
+
+    function setupImport(){
+      $('importFile').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const newPoints = Array.isArray(parsed) ? parsed : Array.isArray(parsed.points) ? parsed.points :
+                         parsed.type === 'FeatureCollection' ? parsed.features.map(f => ({...f.properties, longitude:f.geometry.coordinates[0], latitude:f.geometry.coordinates[1]})) : [];
+        mergePoints(newPoints);
+        alert('読み込みました');
+        e.target.value = '';
+      });
+    }
+
+    function setupInstall(){
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        state.deferredPrompt = e;
+        $('installBtn').classList.remove('hidden');
+      });
+      $('installBtn').addEventListener('click', async () => {
+        if(!state.deferredPrompt) return;
+        state.deferredPrompt.prompt();
+        await state.deferredPrompt.userChoice;
+        state.deferredPrompt = null;
+        $('installBtn').classList.add('hidden');
+      });
+    }
+
+    async function registerSW(){
+      if('serviceWorker' in navigator){
+        try{
+          const reg = await navigator.serviceWorker.register('./sw.js');
+          state.swReady = true;
+          console.log('sw registered', reg.scope);
+          updateDebug();
+        }catch(e){
+          console.warn('sw register failed', e);
+        }
+      }
+    }
+
+    function setupEvents(){
+      $('toMapBtn').onclick = () => { switchScreen('mapScreen'); if(state.map) state.map.invalidateSize(); };
+      $('toArBtn').onclick = () => switchScreen('arScreen');
+      $('toPostsBtn').onclick = () => switchScreen('postsScreen');
+      $('toDataBtn').onclick = () => switchScreen('dataScreen');
+      $('permBtn').onclick = async () => { requestPosition(); await requestOrientation(); updateDebug(); };
+
+      $('mapBackBtn').onclick = () => switchScreen('menuScreen');
+      $('mapToArBtn').onclick = () => switchScreen('arScreen');
+      $('mapCenterBtn').onclick = () => {
+        if(state.map && state.currentPosition){
+          state.map.setView([state.currentPosition.coords.latitude, state.currentPosition.coords.longitude], 17);
+        }
+      };
+      $('mapAddPostBtn').onclick = openPostSheet;
+      $('clearRouteBtn').onclick = clearRoute;
+
+      $('arBackBtn').onclick = () => switchScreen('menuScreen');
+      $('arToMapBtn').onclick = () => switchScreen('mapScreen');
+      $('toggleCamBtn').onclick = () => state.cameraStream ? stopCamera() : startCamera();
+      $('captureBtn').onclick = () => { capturePhoto(); openPostSheet(); };
+      $('arAddPostBtn').onclick = openPostSheet;
+      $('requestOrientationBtn').onclick = requestOrientation;
+
+      $('postsBackBtn').onclick = () => switchScreen('menuScreen');
+      $('postsToDataBtn').onclick = () => switchScreen('dataScreen');
+      $('clearPostsBtn').onclick = clearPosts;
+      $('sheetCaptureBtn').onclick = capturePhoto;
+      $('clearPhotosBtn').onclick = clearPhotoSelection;
+      $('photoFiles').addEventListener('change', async (e) => {
+        await addPhotoFiles(e.target.files);
+        e.target.value = '';
+      });
+      $('photoPreviewGrid').onclick = (e) => {
+        const btn = e.target.closest('.photo-remove');
+        if(!btn) return;
+        const index = Number(btn.dataset.index);
+        state.lastPhotoDataUrls.splice(index, 1);
+        state.lastPhotoDataUrl = state.lastPhotoDataUrls[state.lastPhotoDataUrls.length - 1] || null;
+        renderPhotoPreviewList();
+      };
+      $('postsList').onclick = (e) => {
+        const btn = e.target.closest('.edit-post-btn');
+        if(!btn) return;
+        const p = state.points.find(x => x.id === btn.dataset.id);
+        if(p) openPostSheet(p);
+      };
+
+      $('dataBackBtn').onclick = () => switchScreen('menuScreen');
+      $('dataToMapBtn').onclick = () => switchScreen('mapScreen');
+      $('seedBtn').onclick = () => { mergePoints(SAMPLE_POINTS); alert('サンプルを投入しました'); };
+      $('exportPostsBtn').onclick = () => exportJson(state.points.filter(p => p.pointType !== 'Shelter'), 'posts.json');
+      $('exportAllBtn').onclick = () => exportJson({points: state.points, routeTargetId: state.route?.targetId || null}, 'disaster_ar_all.json');
+      $('exportGeoJsonBtn').onclick = () => exportJson(toGeoJSON(state.points), 'disaster_ar.geojson');
+      $('exportSampleBtn').onclick = () => exportJson(SAMPLE_POINTS, 'sample_points.json');
+
+      $('closePostSheetBtn').onclick = () => { closePostSheet(); resetPostForm(); };
+      $('savePostBtn').onclick = savePost;
+    }
+
+    loadState();
+    setupEvents();
+    setupImport();
+    setupInstall();
+    requestPosition();
+    registerSW();
+    initMap();
+    renderPosts();
+    renderPhotoPreviewList();
+    updateDebug();
+    refreshRouteUI();
+  })();
+  </script>
+</body>
+</html>
