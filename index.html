@@ -1206,6 +1206,11 @@
       $('captureBtn').onclick = () => { capturePhoto(); openPostSheet(); };
       $('arAddPostBtn').onclick = openPostSheet;
       $('requestOrientationBtn').onclick = requestOrientation;
+      $('loadAiBtn').onclick = loadAiModel;
+      $('toggleAiBtn').onclick = toggleAi;
+      $('aiAutoMode').onchange = syncAiSettingsFromUI;
+      $('aiIntervalSec').onchange = syncAiSettingsFromUI;
+      $('aiTargetInput').onchange = syncAiSettingsFromUI;
 
       $('postsBackBtn').onclick = () => switchScreen('menuScreen');
       $('postsToDataBtn').onclick = () => switchScreen('dataScreen');
@@ -1250,6 +1255,8 @@
     requestPosition();
     registerSW();
     initMap();
+    syncAiSettingsFromUI();
+    updateAiUI();
     renderPosts();
     renderPhotoPreviewList();
     updateDebug();
